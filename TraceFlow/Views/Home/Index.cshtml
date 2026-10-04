@@ -1,0 +1,157 @@
+@using Microsoft.AspNetCore.Antiforgery
+@inject IAntiforgery Antiforgery
+@{
+    ViewData["Title"] = "Live Board";
+    var token = Antiforgery.GetAndStoreTokens(Context).RequestToken;
+    var isSupervisor = User.IsInRole("Supervisor");
+    var isGuest = GuestService.IsGuest(User.Identity!.Name);
+}
+
+@if (isGuest)
+{
+  <div class="alert alert-info d-flex align-items-center gap-2 py-2 small" role="alert">
+    <i class="bi bi-hourglass-split"></i>
+    <div>Temporary <strong>guest account</strong>: deleted when you leave the app.</div>
+  </div>
+}
+
+<div class="d-flex justify-content-between align-items-start mb-3 gap-3">
+  <div>
+    <h1 class="h3 mb-0">Production Live Board</h1>
+    <small class="text-secondary">
+      <span class="status-dot" data-bind="css: connection"></span>
+      <span data-bind="text: connection"></span>
+    </small>
+  </div>
+  <button class="btn btn-outline-light position-relative bell" type="button" aria-label="Notifications"
+          data-bs-toggle="offcanvas" data-bs-target="#feedPanel">
+    <i class="bi bi-bell"></i>
+    <span class="badge rounded-pill text-bg-danger bell-badge" data-bind="visible: unread() > 0, text: unread"></span>
+  </button>
+</div>
+
+<div class="toolbar mb-3">
+  <form class="d-flex gap-2" data-bind="submit: addUnit">
+    <input class="form-control" placeholder="New serial number" maxlength="50" autocomplete="off" data-bind="textInput: newSerial" />
+    <button class="btn btn-primary text-nowrap" data-bind="enable: canAdd"><i class="bi bi-plus-lg"></i> Add</button>
+  </form>
+  <div class="input-group search-box">
+    <span class="input-group-text"><i class="bi bi-search"></i></span>
+    <input id="search" type="search" class="form-control" placeholder="Search   ( / )" autocomplete="off" data-bind="textInput: search" />
+  </div>
+</div>
+
+<div class="row g-2 g-md-3 mb-3">
+  <div class="col-6 col-md-3"><div class="stat"><div class="stat-label">Total</div><div class="stat-value" data-bind="text: stats().total"></div></div></div>
+  <div class="col-6 col-md-3"><div class="stat"><div class="stat-label">In production</div><div class="stat-value" data-bind="text: stats().inProgress"></div></div></div>
+  <div class="col-6 col-md-3"><div class="stat"><div class="stat-label">Shipped</div><div class="stat-value text-success" data-bind="text: stats().shipped"></div></div></div>
+  <div class="col-6 col-md-3"><div class="stat"><div class="stat-label">Defects</div><div class="stat-value text-danger" data-bind="text: stats().defects"></div></div></div>
+</div>
+
+<div class="online-bar mb-3">
+  <span class="text-nowrap"><i class="bi bi-people-fill"></i> Online (<span data-bind="text: users().length"></span>)</span>
+  <!-- ko foreach: users -->
+    <span class="badge rounded-pill" data-bind="text: $data, css: $root.isGuestName($data) ? 'text-bg-dark border' : 'text-bg-secondary'"></span>
+  <!-- /ko -->
+</div>
+
+<!-- Mobile: one station at a time -->
+<div class="station-tabs d-md-none mb-3" data-bind="foreach: columns">
+  <button type="button" class="tab-btn" data-bind="css: { active: $root.activeTab() === name }, click: $root.setTab">
+    <span data-bind="text: name"></span>
+    <span class="count" data-bind="text: units().length"></span>
+  </button>
+</div>
+
+<!-- Board (one delegated click listener instead of a handler per card) -->
+<div id="board" class="row g-3" data-bind="foreach: columns">
+  <div class="col-12 col-md-6 col-xl-3" data-bind="css: { 'mob-hide': $root.activeTab() !== name }">
+    <div class="board-col">
+      <div class="board-col-title">
+        <span data-bind="text: name"></span>
+        <span class="badge text-bg-dark" data-bind="text: units().length"></span>
+      </div>
+
+      <div data-bind="visible: $root.loading"><div class="skeleton"></div><div class="skeleton"></div></div>
+
+      <!-- ko foreach: units -->
+      <div class="unit-card" data-bind="css: { defect: isDefect, pop: isNew }, flash: updatedAt, attr: { 'data-id': id }">
+        <div class="d-flex justify-content-between align-items-center gap-2">
+          <strong class="serial" data-bind="text: serial"></strong>
+          <span class="badge text-bg-danger" data-bind="visible: isDefect">DEFECT</span>
+        </div>
+        <small class="text-secondary">by <span data-bind="text: updatedBy"></span> · <span data-bind="text: timeAgo"></span></small>
+        <div class="mt-2 d-flex gap-2">
+          <button class="btn btn-sm btn-outline-light flex-grow-1 flex-md-grow-0" data-act="advance" data-bind="visible: canAdvance">
+            Next <i class="bi bi-arrow-right"></i></button>
+          <button class="btn btn-sm btn-outline-secondary" data-act="history" title="History" aria-label="History">
+            <i class="bi bi-clock-history"></i></button>
+          @if (isSupervisor)
+          {
+            <button class="btn btn-sm btn-outline-danger" data-act="flag" title="Flag defect" aria-label="Flag defect" data-bind="visible: !isDefect()">
+              <i class="bi bi-exclamation-triangle"></i></button>
+          }
+        </div>
+      </div>
+      <!-- /ko -->
+
+      <div class="text-secondary small text-center py-3" data-bind="visible: !$root.loading() && units().length === 0">No units</div>
+    </div>
+  </div>
+</div>
+
+<!-- Notifications panel -->
+<div class="offcanvas offcanvas-end" tabindex="-1" id="feedPanel">
+  <div class="offcanvas-header">
+    <h5 class="offcanvas-title"><i class="bi bi-bell"></i> Activity</h5>
+    <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+  </div>
+  <div class="offcanvas-body">
+    <div class="text-secondary small" data-bind="visible: feed().length === 0">Nothing yet. Logins and unit changes will appear here.</div>
+    <ul class="feed list-unstyled mb-0" data-bind="foreach: feed">
+      <li data-bind="css: 'k-' + kind">
+        <i class="bi" data-bind="css: icon"></i>
+        <div><div data-bind="text: text"></div><small class="text-secondary" data-bind="text: time"></small></div>
+      </li>
+    </ul>
+  </div>
+</div>
+
+<!-- History modal (fullscreen on phones) -->
+<div class="modal fade" id="historyModal" tabindex="-1">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-fullscreen-sm-down">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">History · <span data-bind="text: historyTitle"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <ul class="timeline list-unstyled mb-0" data-bind="foreach: history">
+          <li>
+            <strong data-bind="text: action"></strong>
+            <div class="text-secondary small"><span data-bind="text: user"></span> · <span data-bind="text: when"></span></div>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toasts -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3" data-bind="foreach: toasts">
+  <div class="toast show toast-item" data-bind="css: 'k-' + kind" role="status">
+    <div class="toast-body d-flex align-items-center gap-2">
+      <i class="bi" data-bind="css: icon"></i><span data-bind="text: text"></span>
+    </div>
+  </div>
+</div>
+
+@section Scripts {
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/knockout/3.5.1/knockout-latest.min.js"></script>
+  <script defer src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/8.0.0/signalr.min.js"></script>
+  <script>
+    window.CSRF = "@token";
+    window.ME = @Json.Serialize(User.Identity!.Name);
+  </script>
+  <script defer src="~/js/dashboard.js" asp-append-version="true"></script>
+}

@@ -1,0 +1,34 @@
+@using Microsoft.AspNetCore.Identity
+@inject SignInManager<IdentityUser> SignInManager
+
+<ul class="navbar-nav ms-auto flex-row align-items-center gap-2">
+@if (SignInManager.IsSignedIn(User))
+{
+    var isGuest = GuestService.IsGuest(User.Identity!.Name);
+    <li class="nav-item text-secondary small">
+        <i class="bi bi-person-circle"></i> <span class="d-none d-sm-inline">@User.Identity!.Name</span>
+        @if (isGuest) { <span class="badge text-bg-secondary ms-1">Guest</span> }
+        else if (User.IsInRole("Supervisor")) { <span class="badge text-bg-warning ms-1">Supervisor</span> }
+        else { <span class="badge text-bg-info ms-1">Operator</span> }
+    </li>
+    <li class="nav-item">
+    @if (isGuest)
+    {
+        <form method="post" asp-controller="Guest" asp-action="Leave">
+            <button type="submit" class="btn btn-sm btn-outline-light"><i class="bi bi-box-arrow-right"></i> Leave</button>
+        </form>
+    }
+    else
+    {
+        <form method="post" asp-area="Identity" asp-page="/Account/Logout" asp-route-returnUrl="/">
+            <button type="submit" class="btn btn-sm btn-outline-light">Logout</button>
+        </form>
+    }
+    </li>
+}
+else
+{
+    <li class="nav-item"><a class="nav-link" asp-area="Identity" asp-page="/Account/Register">Register</a></li>
+    <li class="nav-item"><a class="nav-link" asp-area="Identity" asp-page="/Account/Login">Login</a></li>
+}
+</ul>
